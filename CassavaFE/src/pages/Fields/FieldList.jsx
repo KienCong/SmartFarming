@@ -48,6 +48,7 @@ const FieldList = () => {
   const [resetCropModalVisible, setResetCropModalVisible] = useState(false);
   const [resetCropField, setResetCropField] = useState(null);
   const [resetCropStartTime, setResetCropStartTime] = useState(dayjs());
+  const [resetCropEndTime, setResetCropEndTime] = useState(null);
 
   // --- GỌI API LẤY DỮ LIỆU (USE EFFECT) ---
   const fetchFields = async () => {
@@ -90,19 +91,18 @@ const FieldList = () => {
   };
 
   const handleModalSubmit = async (values) => {
-    // TODO: Chỗ này cậu sẽ thay bằng authService.post() hoặc authService.put() để lưu vào DB thực tế
-     setLoading(true); // Hiển thị loading khi đang đợi Server xử lý
+     setLoading(true);
      try {
+      const payload = {
+        ...values,
+        idUser: editingField?.idUser || userData?.id,
+      };
       if(editingField) {
-        // TRƯỜNG HỢP: SỬA (UPDATE)
-        // Giả sử API sửa của bạn là PUT /updateField hoặc tương tự
         const fieldId = editingField.id;
-        await fieldService.put(`/field/updateField/${fieldId}`, values);
+        await fieldService.put(`/field/updateField/${fieldId}`, payload);
         message.success("Cập nhật thông số cánh đồng thành công!");
       } else {
-        // TRƯỜNG HỢP: THÊM MỚI (CREATE)
-        // Gọi đến API @PostMapping("createField") ở Backend Java
-        await fieldService.post('/field/createField', values);
+        await fieldService.post('/field/createField', payload);
         message.success("Thêm cánh đồng mới thành công!");
       }
       setIsModalOpen(false); // Đóng Modal
@@ -134,20 +134,20 @@ const FieldList = () => {
   };
   */
   const handleDelete = async (id) => {
-    if (isAdmin) {
-      try {
-        // TODO: Mở comment dòng dưới khi BE đã có API xóa
-         await fieldService.delete(`/field/delete/${id}`);
-        
-        // Tạm thời xóa trên giao diện để test
-        const newData = fields.filter(item => item.id !== id);
-        setFields(newData);
-        message.success('Đã xóa cánh đồng thành công!');
-      } catch (error) {
-        message.error('Lỗi khi xóa cánh đồng!');
-      }
-    } else {
-      message.error('Lỗi: Bạn không có quyền thực hiện hành động này!');
+    if (!isAdmin) {
+      return message.error('Lỗi: Bạn không có quyền thực hiện hành động này!');
+    }
+    try {
+      await fieldService.delete(`/field/delete/${id}`);
+      setFields((prev) => prev.filter((item) => item.id !== id));
+      message.success('Đã xóa cánh đồng thành công!');
+    } catch (error) {
+      console.error('Delete field error:', error);
+      const serverMsg =
+        (typeof error.response?.data === 'string' && error.response.data) ||
+        error.response?.data?.message ||
+        error.message;
+      message.error(`Không xoá được cánh đồng: ${serverMsg || 'lỗi không xác định'}`);
     }
   };
 
@@ -157,6 +157,7 @@ const FieldList = () => {
     }
     setResetCropField(record);
     setResetCropStartTime(dayjs());
+    setResetCropEndTime(null);
     setResetCropModalVisible(true);
   };
 
@@ -165,10 +166,14 @@ const FieldList = () => {
     if (!resetCropStartTime) {
       return message.error('Vui lòng chọn ngày bắt đầu vụ mới!');
     }
+    if (resetCropEndTime && !resetCropEndTime.isAfter(resetCropStartTime)) {
+      return message.error('Ngày kết thúc phải sau ngày bắt đầu!');
+    }
     setLoading(true);
     try {
       await fieldService.post(`/field/resetCrop/${resetCropField.id}`, {
         startTime: resetCropStartTime.toDate().toISOString(),
+        endTime: resetCropEndTime ? resetCropEndTime.toDate().toISOString() : null,
       });
       message.success('Đã bắt đầu vụ mùa mới cho cánh đồng!');
       setResetCropModalVisible(false);
@@ -221,6 +226,17 @@ const FieldList = () => {
       render: (text) => <strong>{text}</strong>,
     },
     {
+      title: 'Loại',
+      dataIndex: 'mode',
+      key: 'mode',
+      render: (mode) => {
+        const m = mode || 'SIMULATION';
+        return m === 'OPERATION'
+          ? <Tag color="volcano">Thực thi</Tag>
+          : <Tag color="purple">Mô phỏng</Tag>;
+      },
+    },
+    {
       title: 'Nhóm',
       dataIndex: 'groupId',
       key: 'groupId',
@@ -241,12 +257,6 @@ const FieldList = () => {
         const date = new Date(text);
         return date.toLocaleDateString('vi-VN');
       }
-    },
-    {
-      title: 'Ngày tuổi (DAP)',
-      dataIndex: 'dap', // Hiển thị thêm số ngày sau khi trồng
-      key: 'dap',
-      render: (text) => `${text} ngày`,
     },
     {
       title: 'Chế độ tưới',
@@ -380,12 +390,12 @@ const FieldList = () => {
         onCancel={() => setResetCropModalVisible(false)}
         okText="Có, bắt đầu vụ mới"
         cancelText="Hủy"
-        okButtonProps={{ danger: true, loading }}
+        okButtonProps={{ loading }}
       >
         <p style={{ marginTop: 0 }}>
-          Hành động này sẽ <strong>xóa toàn bộ</strong> dữ liệu cảm biến,
-          kết quả mô phỏng và lịch sử tưới của cánh đồng
+          Bắt đầu một vụ mùa mới cho cánh đồng
           {resetCropField ? ` "${resetCropField.name}"` : ''}.
+          Lịch sử mô phỏng và tưới của các vụ trước vẫn được <strong>giữ lại</strong> và phân biệt theo ngày bắt đầu vụ.
         </p>
         <p style={{ marginBottom: 8 }}>Ngày bắt đầu vụ mới:</p>
         <DatePicker
@@ -395,8 +405,17 @@ const FieldList = () => {
           onChange={(d) => setResetCropStartTime(d)}
           placeholder="Chọn ngày bắt đầu"
         />
+        <p style={{ marginTop: 12, marginBottom: 8 }}>Ngày kết thúc vụ (tuỳ chọn):</p>
+        <DatePicker
+          style={{ width: '100%' }}
+          format="DD/MM/YYYY"
+          value={resetCropEndTime}
+          onChange={(d) => setResetCropEndTime(d)}
+          placeholder="Trống = vụ đang chạy (mô phỏng tới hôm nay)"
+          allowClear
+        />
         <p style={{ marginTop: 8, color: '#999', fontSize: 12 }}>
-          Có thể chọn ngày trong quá khứ để mô phỏng lại vụ đã qua.
+          Có thể chọn khoảng ngày trong quá khứ để mô phỏng lại vụ đã qua.
         </p>
       </Modal>
     </div>

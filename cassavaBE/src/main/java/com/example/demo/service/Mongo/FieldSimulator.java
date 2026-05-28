@@ -67,11 +67,18 @@ public class FieldSimulator {
             throw new RuntimeException("Cánh đồng chưa được gán vào nhóm (groupId) nào");
         }
 
-        // 2. Lấy dữ liệu thời tiết chung của nhóm từ MongoDB
-        List<String> combinedData = sensorValueService.getCombinedValues(cfg.getGroupId());
+        // 2. Lấy dữ liệu thời tiết chung của nhóm từ MongoDB, giới hạn theo [startTime, endTime]
+        // endTime null = vụ đang chạy → dùng now()
+        Date rangeStart = cfg.getStartTime();
+        Date rangeEnd = cfg.getEndTime() != null ? cfg.getEndTime() : new Date();
+        if (rangeStart != null && rangeEnd.before(rangeStart)) {
+            throw new RuntimeException("Ngày kết thúc vụ không được trước ngày bắt đầu");
+        }
+        List<String> combinedData = sensorValueService.getCombinedValues(cfg.getGroupId(), rangeStart, rangeEnd);
 
         if (combinedData == null || combinedData.isEmpty()) {
-            throw new RuntimeException("Không có dữ liệu cảm biến cho nhóm của cánh đồng này");
+            throw new RuntimeException("Không có dữ liệu cảm biến cho nhóm trong khoảng vụ ["
+                    + rangeStart + " → " + rangeEnd + "]");
         }
 
         Field field = new Field(cfg.getName());
@@ -92,13 +99,21 @@ public class FieldSimulator {
         // 4. Chạy mô phỏng
         field.runModel();
 
-        // 5. Anchor: first weather data entry's date and DOY
-        String firstTimeStr = Field._weatherData.get(0).get(0).toString(); // "yyyy-MM-dd HH:mm:ss"
-        LocalDate baseDate = LocalDate.parse(firstTimeStr.substring(0, 10));
-        int baseDoy = (int) Math.floor(Double.parseDouble(Field._weatherData.get(0).get(1).toString()));
-
-        // Tag mọi row của lần chạy này theo mùa vụ hiện tại của field
+        // 5. Anchor theo startTime của vụ — không còn phụ thuộc vào row weather đầu tiên.
+        // Nếu startTime null (data cũ) thì fallback về row weather đầu tiên cho tương thích ngược.
+        // Lưu ý: Field.getDoy() trả về DOY 0-based (Jan 1 = 0), còn LocalDate.getDayOfYear()
+        // trả về 1-based (Jan 1 = 1) → phải -1 để khớp với _results[8] (lưu `t` từ getDoy).
         Date cropStartTime = cfg.getStartTime();
+        LocalDate baseDate;
+        int baseDoy;
+        if (cropStartTime != null) {
+            baseDate = cropStartTime.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+            baseDoy = baseDate.getDayOfYear() - 1;
+        } else {
+            String firstTimeStr = Field._weatherData.get(0).get(0).toString();
+            baseDate = LocalDate.parse(firstTimeStr.substring(0, 10));
+            baseDoy = (int) Math.floor(Double.parseDouble(Field._weatherData.get(0).get(1).toString()));
+        }
 
         // 6. Lưu kết quả vào MongoDB
         List<FieldSimulationResult> savedResults = saveResultsToMongo(fieldId, cropStartTime, field, baseDate, baseDoy);
@@ -133,18 +148,21 @@ public class FieldSimulator {
 
         // Use exact irrigation events recorded during simulation (Field.java line 794-815)
         for (com.example.demo.entity.HistoryIrrigation h : field.listHistory) {
-            double amountM3Ha = h.getAmount() * 10.0; // convert mm to m³/ha
+            double amountMm = h.getAmount(); // simulation model already produces mm
             double duration = h.getDuration(); // already in minutes
 
-            // Field.java stores time with hardcoded 2024 year, but dayOfYear and hour:minute are correct
-            // Re-derive correct date using anchor-based approach
-            LocalDate originalDate = LocalDate.parse(h.getTime().substring(0, 10));
-            int doy = originalDate.getDayOfYear();
-            LocalDate correctedDate = baseDate.plusDays(doy - baseDoy);
+            // Use the raw simulation time `t` as the date source — same anchor formula
+            // simulation_result uses. Field.java's `time` string is a fake-2024 calendar
+            // that loses information past day 365 and on leap-year boundaries; do not parse it.
+            double tRaw = h.getSimulationT() != null ? h.getSimulationT() : 0.0;
+            int dayOffset = (int) Math.floor(tRaw);
+            LocalDate correctedDate = baseDate.plusDays(dayOffset - baseDoy);
+            double fractionDay = tRaw - Math.floor(tRaw);
+            int hours = (int) (fractionDay * 24);
+            int minutes = (int) ((fractionDay * 24 - hours) * 60);
+            String correctedTime = String.format("%s %02d:%02d:00", correctedDate, hours, minutes);
 
-            String correctedTime = correctedDate + " " + h.getTime().substring(11);
-
-            toSave.add(new IrrigationHistory(fieldId, cropStartTime, correctedTime, h.getUserName(), amountM3Ha, duration));
+            toSave.add(new IrrigationHistory(fieldId, cropStartTime, correctedTime, h.getUserName(), amountMm, duration));
         }
 
         if (toSave.isEmpty()) {
@@ -176,7 +194,7 @@ public class FieldSimulator {
             Date time = Date.from(localDate.atStartOfDay(ZoneId.systemDefault()).toInstant());
 
             double yield = results.get(0).get(i);
-            double irrigation = results.get(2).get(i) * 10.0; // convert mm to m³/ha
+            double irrigation = results.get(2).get(i); // mm, from simulation model
             double leafArea = results.get(3).get(i);
             double labileCarbon = results.get(4).get(i);
 

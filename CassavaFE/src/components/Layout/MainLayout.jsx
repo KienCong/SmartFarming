@@ -1,202 +1,77 @@
-import React, { useState, useEffect } from 'react';
-import { Layout, Menu, theme, Typography, Button, Dropdown, Space, Avatar, Drawer } from 'antd';
-import {
-  AppstoreOutlined,
-  ApartmentOutlined,
-  CloudOutlined,
-  LogoutOutlined,
-  MenuFoldOutlined,
-  MenuUnfoldOutlined,
-  UserOutlined, // Thêm icon này
-  DownOutlined  // Thêm icon này
-} from '@ant-design/icons';
-import { useNavigate, Outlet, useLocation } from 'react-router-dom';
+import { AntDesign, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Tabs } from 'expo-router';
+import React from 'react';
 
-const { Header, Sider, Content } = Layout;
-const { Title } = Typography;
-const MainLayout = () => {
-  const [collapsed, setCollapsed] = useState(false);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-
-  useEffect(() => {
-    const handleResize = () => {
-      const mobile = window.innerWidth < 768;
-      setIsMobile(mobile);
-      if (!mobile) setDrawerOpen(false);
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-// 1. Lấy thông tin user từ localStorage để kiểm tra quyền
-  const userData = JSON.parse(localStorage.getItem("user"));
-  const isAdmin = userData?.isAdmin == true; //// Kiểm tra trường admin trong Token/User
-  //const isAdmin = true;
-
-// 1. Giả lập dữ liệu User để test (Nếu chưa có trong localStorage)
-  // Cậu có thể mở F12 -> Application -> Local Storage để xem/thêm dữ liệu này
- // const userData = JSON.parse(localStorage.getItem("user")) || { username: "Kiên Admin", admin: true };
- // const isAdmin = userData?.admin === true;  
-  const navigate = useNavigate();
-  const location = useLocation();
-  // thêm mới
-  const userMenuItems = [
-  {
-    key: 'profile',
-    label: 'Thông tin cá nhân',
-    icon: <UserOutlined />,
-    onClick: () => navigate('/profile'), // Điều hướng tới trang cá nhân
-  },
-  {
-    type: 'divider', // Dấu gạch ngang phân cách
-  },
-  {
-    key: 'logout',
-    label: 'Đăng xuất',
-    icon: <LogoutOutlined />,
-    danger: true, // Chữ màu đỏ cho nổi bật
-    onClick: () => {
-      localStorage.removeItem("user"); // Xóa data khi đăng xuất
-      navigate('/login');
-    },
-  },
-];
-
-  const {
-    token: { colorBgContainer, borderRadiusLG },
-  } = theme.useToken();
-
-  // Cấu hình các mục trong Menu (Sidebar)
-  const menuItems = [
-    {
-      key: '/fields',
-      icon: <AppstoreOutlined />,
-      label: 'Quản lý cánh đồng',
-    },
-    {
-      key: '/field-groups',
-      icon: <ApartmentOutlined />,
-      label: 'Nhóm cánh đồng',
-    },
-    {
-      key: '/weather',
-      icon: <CloudOutlined />,
-     label: 'Dữ liệu thời tiết',
-   },
-   isAdmin ? {
-      key: '/users',
-      icon: <AppstoreOutlined />,
-      label: 'Danh sách người dùng',
-    } : null
-
-  ];
-
-  const handleMenuClick = ({ key }) => {
-    navigate(key);
-  };
-
-  const handleLogout = () => {
-    // TODO: Xóa token đăng nhập ở local storage nếu có
-    navigate('/login');
-  };
-
-  const siderContent = (
-    <>
-      <div style={{
-        height: 64,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: collapsed && !isMobile ? '0' : '0 16px',
-        transition: 'all 0.2s'
-      }}>
-        <img
-          src="/src/assets/images/logo-uet.png"
-          alt="logo"
-          style={{
-            width: 32,
-            height: 32,
-            marginRight: collapsed && !isMobile ? 0 : 12,
-            transition: 'all 0.2s'
-          }}
-        />
-        {(!collapsed || isMobile) && (
-          <Title level={4} style={{ color: 'white', margin: 0, whiteSpace: 'nowrap' }}>
-            SMART FARMING
-          </Title>
-        )}
-      </div>
-      <Menu
-        theme="dark"
-        mode="inline"
-        selectedKeys={[location.pathname]}
-        onClick={(info) => {
-          handleMenuClick(info);
-          if (isMobile) setDrawerOpen(false);
-        }}
-        items={menuItems}
-      />
-    </>
-  );
-
+export default function TabLayout() {
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      {isMobile ? (
-        <Drawer
-          placement="left"
-          open={drawerOpen}
-          onClose={() => setDrawerOpen(false)}
-          width={250}
-          styles={{ body: { padding: 0, background: '#001529' } }}
-          closable={false}
-        >
-          {siderContent}
-        </Drawer>
-      ) : (
-        <Sider trigger={null} collapsible collapsed={collapsed} theme="dark" width={250}>
-          {siderContent}
-        </Sider>
-      )}
+    <Tabs
+      screenOptions={{
+        tabBarActiveTintColor: '#1890ff', // Màu xanh dương Ant Design
+        tabBarInactiveTintColor: '#8c8c8c',
+        tabBarStyle: {
+          backgroundColor: '#ffffff',
+          borderTopWidth: 1,
+          borderTopColor: '#f0f0f0',
+          height: 60,
+          paddingBottom: 8,
+          paddingTop: 8,
+        },
+        headerStyle: {
+          backgroundColor: '#1890ff',
+        },
+        headerTintColor: '#fff',
+        headerTitleStyle: {
+          fontWeight: 'bold',
+        },
+      }}
+    >
+      {/* 1. TAB CÁNH ĐỒNG */}
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: 'Cánh đồng',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="sprout" size={size} color={color} />
+          ),
+          headerTitle: 'Quản lý cánh đồng',
+        }}
+      />
 
-      <Layout>
-        <Header style={{ padding: 0, background: colorBgContainer, display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingRight: 16 }}>
-          <Button
-            type="text"
-            icon={isMobile || collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-            onClick={() => isMobile ? setDrawerOpen(true) : setCollapsed(!collapsed)}
-            style={{ fontSize: '16px', width: 64, height: 64 }}
-          />
+      {/* 2. TAB NHÓM CÁNH ĐỒNG */}
+      <Tabs.Screen
+        name="groups" 
+        options={{
+          title: 'Nhóm',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="shape-outline" size={size} color={color} />
+          ),
+          headerTitle: 'Nhóm cánh đồng',
+        }}
+      />
 
-          <Dropdown menu={{ items: userMenuItems }} trigger={['click']}>
-            <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-              <Space>
-                <Avatar icon={<UserOutlined />} style={{ backgroundColor: '#1677ff' }} />
-                {!isMobile && (
-                  <span style={{ fontWeight: '500', fontSize: '14px' }}>
-                    {userData?.username || 'Người dùng'}
-                  </span>
-                )}
-                <DownOutlined style={{ fontSize: '10px', color: '#8c8c8c' }} />
-              </Space>
-            </div>
-          </Dropdown>
-        </Header>
+      {/* 3. TAB THỜI TIẾT */}
+      <Tabs.Screen
+        name="weather" 
+        options={{
+          title: 'Thời tiết',
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="cloud-rain" size={size} color={color} />
+          ),
+          headerTitle: 'Dự báo & Thời tiết',
+        }}
+      />
 
-        <Content
-          style={{
-            margin: isMobile ? '12px 8px' : '24px 16px',
-            padding: isMobile ? 12 : 24,
-            minHeight: 280,
-            background: colorBgContainer,
-            borderRadius: borderRadiusLG,
-            overflow: 'auto'
-          }}
-        >
-          <Outlet />
-        </Content>
-      </Layout>
-    </Layout>
+      {/* 4. TAB NGƯỜI DÙNG / CÁ NHÂN */}
+      <Tabs.Screen
+        name="users" 
+        options={{
+          title: 'Cá nhân',
+          tabBarIcon: ({ color, size }) => (
+            <AntDesign name="user" size={size} color={color} />
+          ),
+          headerTitle: 'Tài khoản của tôi',
+        }}
+      />
+    </Tabs>
   );
-};
-
-export default MainLayout;
+}

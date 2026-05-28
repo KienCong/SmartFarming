@@ -61,11 +61,16 @@ public class Field {
     private double fertilizationLevel;
     private Integer valveId;
 
+    // SIMULATION = ruộng mô phỏng (không gửi lệnh tưới ra edge)
+    // OPERATION  = ruộng thực thi (sẽ publish MQTT khi bridge sẵn sàng)
+    private String mode = "SIMULATION";
+
     // Các biến bạn muốn để mặc định (không truyền từ JSON)
     private String idUser = "69ccc364a1e7905cc9356ce3"; // Default ID
     private int irrigationDuration = 2;
     private double scaleRain = 100;
     private Date startTime = new Date();
+    private Date endTime; // null = vụ đang chạy → mô phỏng tới now()
     private int dAP = 1;// DEFAULT START = 1
     private boolean isIrrigating = false;
     /**
@@ -74,7 +79,7 @@ public class Field {
     public Field() {}
 
     /**
-     * Constructor with default values matching Firebase CustomizedParameters defaults.
+     * Constructor with default field values.
      * Usage: Field fieldTest = new Field("fieldTest");
      */
     public Field(String name) {
@@ -160,9 +165,15 @@ public class Field {
     public Date getStartTime() { return startTime; }
     public void setStartTime(Date startTime) { this.startTime = startTime; }
 
+    public Date getEndTime() { return endTime; }
+    public void setEndTime(Date endTime) { this.endTime = endTime; }
+
     public boolean isIrrigating() { return isIrrigating; }
     public void setIrrigating(boolean irrigating) { isIrrigating = irrigating; }
 
     public Integer getValveId() { return valveId; }
     public void setValveId(Integer valveId) { this.valveId = valveId; }
+
+    public String getMode() { return mode; }
+    public void setMode(String mode) { this.mode = mode; }
 }

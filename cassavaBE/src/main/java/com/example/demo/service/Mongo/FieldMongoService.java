@@ -69,6 +69,7 @@ public class FieldMongoService {
         }
 
         validateField(field);
+        field.setMode(normalizeMode(field.getMode()));
 
         field.setId(null);
         if (field.getStartTime() == null) {
@@ -78,6 +79,15 @@ public class FieldMongoService {
         Field saved = fieldRepository.save(field);
         fieldSensorService.initDefaultSensors(saved.getId());
         return saved;
+    }
+
+    private String normalizeMode(String mode) {
+        if (mode == null) return "SIMULATION";
+        String m = mode.trim().toUpperCase();
+        if (!m.equals("SIMULATION") && !m.equals("OPERATION")) {
+            throw new RuntimeException("mode chỉ nhận giá trị SIMULATION hoặc OPERATION");
+        }
+        return m;
     }
     public Field clone (String srcFieldId, String newName) {
         if (newName == null || newName.trim().isEmpty()) {
@@ -186,10 +196,17 @@ public class FieldMongoService {
             throw new RuntimeException("User not found");
         }
 
+        if (newData.getGroupId() == null || newData.getGroupId().trim().isEmpty()
+                || !fieldGroupRepository.existsById(newData.getGroupId())) {
+            throw new RuntimeException("Cánh đồng phải thuộc một nhóm (groupId) hợp lệ");
+        }
+
         old.setIdUser(newData.getIdUser());
+        old.setGroupId(newData.getGroupId());
         old.setName(newData.getName());
         old.setAcreage(newData.getAcreage());
         old.setAutoIrrigation(newData.isAutoIrrigation());
+        old.setMode(normalizeMode(newData.getMode()));
 
         old.setFieldCapacity(newData.getFieldCapacity());
         old.setIrrigationDuration(newData.getIrrigationDuration());
@@ -206,6 +223,7 @@ public class FieldMongoService {
         old.setDAP(newData.getDAP());
 
         old.setStartTime(newData.getStartTime());
+        old.setEndTime(newData.getEndTime());
 
         old.setIrrigating(newData.isIrrigating());
 
@@ -231,14 +249,19 @@ public class FieldMongoService {
     // Clears per-crop data (sensor values, simulation results, irrigation history)
     // and resets the Field's per-crop state. Keeps field config and sensor mappings.
     // ========================
-    public Field resetCropCycle(String id, Date startTime) {
+    public Field resetCropCycle(String id, Date startTime, Date endTime) {
         Field field = fieldRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy cánh đồng ID: " + id));
+
+        if (startTime != null && endTime != null && endTime.before(startTime)) {
+            throw new IllegalArgumentException("Ngày kết thúc vụ không được trước ngày bắt đầu");
+        }
 
         // Giữ nguyên lịch sử của các vụ trước.
         // Vụ mới được phân biệt bằng startTime mới — simulation_result / irrigation_history
         // sẽ được tag bởi cropStartTime tại thời điểm ghi.
         field.setStartTime(startTime != null ? startTime : new Date());
+        field.setEndTime(endTime); // null = vụ đang chạy
         field.setDAP(1);
         field.setIrrigating(false);
 

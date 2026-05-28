@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Card, Button, Typography, Spin, message, Empty } from 'antd';
+import { Card, Button, Typography, Spin, message, Empty, DatePicker, Space } from 'antd';
 import { ArrowLeftOutlined, LoadingOutlined } from '@ant-design/icons';
 import {
   LineChart,
@@ -13,10 +13,12 @@ import {
   ResponsiveContainer,
   AreaChart,
   Area,
+  Brush,
 } from 'recharts';
 import api from '../../services/api';
 
 const { Title, Text } = Typography;
+const { RangePicker } = DatePicker;
 
 const SOIL_SERIES = [
   { id: 'humidity30', label: 'Độ ẩm đất 30cm', color: '#13c2c2' },
@@ -48,11 +50,18 @@ const getChartColor = (id) => {
   }
 };
 
-const formatTime = (iso) => new Date(iso).toLocaleTimeString('vi-VN', {
-  hour: '2-digit',
-  minute: '2-digit',
-  timeZone: 'Asia/Ho_Chi_Minh',
-});
+// Intl.DateTimeFormat chèn ký tự narrow no-break space (U+202F) giữa giờ và ngày trên một số runtime,
+// gộp mọi whitespace về space thường để tránh lệch render giữa browser.
+const formatTime = (iso) => {
+  const date = new Date(iso);
+  return new Intl.DateTimeFormat('vi-VN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    day: '2-digit',
+    month: '2-digit',
+    timeZone: 'Asia/Ho_Chi_Minh',
+  }).format(date).replace(/\s+/g, ' ');
+};
 
 const formatFullTime = (iso) => new Date(iso).toLocaleString('vi-VN', {
   timeZone: 'Asia/Ho_Chi_Minh',
@@ -67,6 +76,7 @@ const WeatherDetail = () => {
 
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [dateRange, setDateRange] = useState(null);
 
   const isSoilHumidity = sensorId === 'soilHumidity';
   const isGroupScope = !!groupId;
@@ -79,6 +89,19 @@ const WeatherDetail = () => {
       return;
     }
 
+    const resolveRange = (latest) => {
+      if (dateRange && dateRange[0] && dateRange[1]) {
+        return {
+          startCutoff: dateRange[0].startOf('day').valueOf(),
+          endCutoff: dateRange[1].endOf('day').valueOf(),
+        };
+      }
+      return {
+        startCutoff: latest > 0 ? latest - 24 * 60 * 60 * 1000 : 0,
+        endCutoff: latest,
+      };
+    };
+
     const fetchSoilHumidityCombined = async () => {
       const responses = await Promise.all(
         SOIL_SERIES.map((s) =>
@@ -88,18 +111,18 @@ const WeatherDetail = () => {
         )
       );
 
-      const buckets = new Map();
       const latest = Math.max(
         ...responses.flatMap((r) => (r.data?.[0] ? [new Date(r.data[0].time).getTime()] : [])),
         0
       );
-      const cutoff = latest > 0 ? latest - 24 * 60 * 60 * 1000 : 0;
+      const { startCutoff, endCutoff } = resolveRange(latest);
 
+      const buckets = new Map();
       responses.forEach((res, idx) => {
         const key = SOIL_SERIES[idx].id;
         (res.data || []).forEach((item) => {
           const t = new Date(item.time).getTime();
-          if (t < cutoff) return;
+          if (t < startCutoff || t > endCutoff) return;
           if (!buckets.has(t)) {
             buckets.set(t, {
               t,
@@ -118,10 +141,15 @@ const WeatherDetail = () => {
       const params = isGroupScope ? { groupId, sensorId } : { fieldId, sensorId };
       const response = await api.get(url, { params });
       if (!response.data || response.data.length === 0) return [];
+
       const latest = new Date(response.data[0].time).getTime();
-      const cutoff = latest - 24 * 60 * 60 * 1000;
+      const { startCutoff, endCutoff } = resolveRange(latest);
+
       return response.data
-        .filter((item) => new Date(item.time).getTime() >= cutoff)
+        .filter((item) => {
+          const t = new Date(item.time).getTime();
+          return t >= startCutoff && t <= endCutoff;
+        })
         .reverse()
         .map((item) => ({
           time: formatTime(item.time),
@@ -144,33 +172,45 @@ const WeatherDetail = () => {
     };
 
     run();
-  }, [sensorId, fieldId, groupId, isSoilHumidity, isGroupScope]);
+  }, [sensorId, fieldId, groupId, isSoilHumidity, isGroupScope, dateRange]);
 
   const sensorNameVi = SENSOR_NAMES_VI[sensorId] || sensorId;
 
   return (
     <div style={{ padding: '24px' }}>
-      <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(-1)} style={{ marginBottom: 16 }}>
-        Quay lại trạm quan trắc
-      </Button>
+      <Space style={{ marginBottom: 16, width: '100%', justifyContent: 'space-between' }}>
+        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(-1)}>
+          Quay lại trạm quan trắc
+        </Button>
+        <Space>
+          <Text strong>Chọn thời gian:</Text>
+          <RangePicker
+            value={dateRange}
+            onChange={(dates) => setDateRange(dates)}
+            format="DD/MM/YYYY"
+            placeholder={['Từ ngày', 'Đến ngày']}
+          />
+        </Space>
+      </Space>
 
       <Card
         title={<Title level={4} style={{ margin: 0 }}>Biểu đồ trực quan: {sensorNameVi}</Title>}
-        extra={<Text type="secondary">Dữ liệu 24h qua • {isGroupScope ? 'Nguồn: nhóm (chia sẻ)' : 'Nguồn: cánh đồng'}</Text>}
+        extra={<Text type="secondary">{dateRange ? 'Dữ liệu tùy chỉnh' : 'Dữ liệu 24h qua'} • {isGroupScope ? 'Nguồn: nhóm (chia sẻ)' : 'Nguồn: cánh đồng'}</Text>}
       >
         {loading ? (
           <div style={{ height: 400, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Spin indicator={<LoadingOutlined style={{ fontSize: 40 }} spin />} />
           </div>
         ) : data.length > 0 && isSoilHumidity ? (
-          <div style={{ width: '100%', height: 400 }}>
+          <div style={{ width: '100%', height: 450 }}>
             <ResponsiveContainer>
-              <LineChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+              <LineChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="time" />
+                <XAxis dataKey="time" interval="preserveStartEnd" minTickGap={40} />
                 <YAxis unit="%" domain={[0, 100]} />
                 <Tooltip labelFormatter={(_, payload) => payload[0]?.payload?.fullTime} />
-                <Legend />
+                <Legend verticalAlign="top" wrapperStyle={{ paddingBottom: 15 }} />
+                <Brush dataKey="time" height={30} stroke="#13c2c2" />
                 {SOIL_SERIES.map((s) => (
                   <Line
                     key={s.id}
@@ -187,9 +227,9 @@ const WeatherDetail = () => {
             </ResponsiveContainer>
           </div>
         ) : data.length > 0 ? (
-          <div style={{ width: '100%', height: 400 }}>
+          <div style={{ width: '100%', height: 450 }}>
             <ResponsiveContainer>
-              <AreaChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+              <AreaChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 20 }}>
                 <defs>
                   <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor={getChartColor(sensorId)} stopOpacity={0.8} />
@@ -197,13 +237,14 @@ const WeatherDetail = () => {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="time" />
+                <XAxis dataKey="time" interval="preserveStartEnd" minTickGap={40} />
                 <YAxis />
                 <Tooltip
                   labelStyle={{ fontWeight: 'bold' }}
                   formatter={(value) => [`${value}`, 'Giá trị']}
                   labelFormatter={(_, payload) => payload[0]?.payload?.fullTime}
                 />
+                <Brush dataKey="time" height={30} stroke={getChartColor(sensorId)} />
                 <Area
                   type="monotone"
                   dataKey="value"
@@ -216,7 +257,7 @@ const WeatherDetail = () => {
             </ResponsiveContainer>
           </div>
         ) : (
-          <Empty description="Không có dữ liệu lịch sử cho cảm biến này" />
+          <Empty description="Không có dữ liệu lịch sử cho khoảng thời gian này" />
         )}
       </Card>
     </div>

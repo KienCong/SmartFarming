@@ -1,6 +1,7 @@
 package com.example.demo.controller.mongo;
 
 import com.example.demo.entity.MongoEntity.Field;
+import com.example.demo.service.Mongo.CropSeasonService;
 import com.example.demo.service.Mongo.FieldMongoService;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +20,9 @@ public class FieldMongoController {
 
     @Autowired
     private FieldMongoService fieldService;
+
+    @Autowired
+    private CropSeasonService cropSeasonService;
 
     // ========================
     // CREATE
@@ -54,6 +58,14 @@ public class FieldMongoController {
     }
 
     // ========================
+    // LIST CROP SEASONS
+    // ========================
+    @GetMapping("/{id}/seasons")
+    public ResponseEntity<?> listSeasons(@PathVariable String id) {
+        return ResponseEntity.ok(cropSeasonService.listSeasons(id));
+    }
+
+    // ========================
     // UPDATE
     // ========================
     @PutMapping("/updateField/{id}")
@@ -78,11 +90,21 @@ public class FieldMongoController {
             @RequestBody(required = false) Map<String, String> body) {
         try {
             Date startTime = null;
-            if (body != null && body.get("startTime") != null && !body.get("startTime").isBlank()) {
-                startTime = Date.from(java.time.Instant.parse(body.get("startTime")));
+            Date endTime = null;
+            if (body != null) {
+                String s = body.get("startTime");
+                if (s != null && !s.isBlank()) {
+                    startTime = Date.from(java.time.Instant.parse(s));
+                }
+                String e = body.get("endTime");
+                if (e != null && !e.isBlank()) {
+                    endTime = Date.from(java.time.Instant.parse(e));
+                }
             }
-            Field updated = fieldService.resetCropCycle(id, startTime);
+            Field updated = fieldService.resetCropCycle(id, startTime, endTime);
             return ResponseEntity.ok(updated);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
         } catch (Exception e) {

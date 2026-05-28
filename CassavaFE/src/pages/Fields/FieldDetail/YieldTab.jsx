@@ -71,7 +71,7 @@ const YieldTab = ({ data }) => {
         <Row gutter={[16, 16]}>
             <Col xs={24} lg={12}>{renderLineChart("Sản lượng (Yield)", "yield", "#8884d8", "kg")}</Col>
             <Col xs={24} lg={12}>{renderLineChart("Diện tích lá (Leaf Area)", "leafArea", "#82ca9d", "m2")}</Col>
-            <Col xs={24} lg={12}>{renderLineChart("Lượng tưới (Irrigation)", "irrigation", "#0088FE", "m³/ha")}</Col>
+            <Col xs={24} lg={12}>{renderLineChart("Lượng tưới (Irrigation)", "irrigation", "#0088FE", "mm")}</Col>
             <Col xs={24} lg={12}>{renderLineChart("Carbon linh động (Labile Carbon)", "labileCarbon", "#FFBB28", "g")}</Col>
         </Row>
     );
@@ -81,16 +81,15 @@ export default YieldTab;
 */
 import React from 'react';
 import { Row, Col, Card, Empty } from 'antd';
-import { 
-  AreaChart, 
-  Area, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer, 
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
   Legend,
-
 } from 'recharts';
 
 const YieldTab = ({ data }) => {
@@ -128,12 +127,12 @@ const YieldTab = ({ data }) => {
                         />
                         <Legend verticalAlign="top" height={36}/>
                         
-                        <Area 
-                            type="monotone" 
-                            dataKey={dataKey} 
-                            stroke={color} 
+                        <Area
+                            type="monotone"
+                            dataKey={dataKey}
+                            stroke={color}
                             strokeWidth={3}
-                            fillOpacity={1} 
+                            fillOpacity={1}
                             fill={`url(#color${dataKey})`} // Sử dụng Gradient đã định nghĩa ở trên
                             name={title}
                             animationDuration={1200}
@@ -146,7 +145,7 @@ const YieldTab = ({ data }) => {
 
     return (
         <Row gutter={[16, 16]}>
-            <Col xs={24} lg={12}>{renderAreaChart("Lượng tưới (Irrigation)", "irrigation", "#0088FE", "m³/ha")}</Col>
+            <Col xs={24} lg={12}>{renderAreaChart("Lượng tưới (Irrigation)", "irrigation", "#0088FE", "mm")}</Col>
             <Col xs={24} lg={12}>{renderAreaChart("Sản lượng (Yield)", "yield", "#8884d8", "kg")}</Col>
             <Col xs={24} lg={12}>{renderAreaChart("Diện tích lá (Leaf Area)", "leafArea", "#82ca9d", "m2")}</Col>
             <Col xs={24} lg={12}>{renderAreaChart("Carbon linh động (Labile Carbon)", "labileCarbon", "#FFBB28", "g")}</Col>
